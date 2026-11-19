@@ -176,6 +176,6 @@
     list: () => call('list'),                                  // all containers (+ open tab counts)
     current: () => call('current'),                            // container of this tab, or null
     open: (name, url) => call('open', { name, url }),          // move THIS tab into a container (created if missing; 'none' to leave) and load url
-    create: (name, color, icon) => call('create', { name, color, icon }),
+    create: (name, color) => call('create', { name, color }),
   });
 })();

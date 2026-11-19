@@ -11,7 +11,7 @@ jar, so you can be signed in to the same site as different people in side-by-sid
 
 ## Use
 
-- **Popup**: click a container to open a new tab in it. Use ✎ to edit, 🧹 to clear its cookies, and 🗑 to delete it (click 🧹 or 🗑 twice to confirm).
+- **Popup**: click a container to open a new tab in it. Use **Edit**, **Clear** (its cookies) and **Delete** next to it (Clear and Delete ask "Sure?" first). Want an emoji? Put it in the name, e.g. `💼 Work`.
 - **This tab** moves the current tab into a container and reloads it.
 - **Always open *site* in** opens that site, and its subdomains, in the chosen container every time.
 - Container tabs are put in a colored tab group named after the container, and the toolbar badge shows the container's first letter.
@@ -36,10 +36,10 @@ https://container.invalid/?name=Work&url=https://mail.google.com/
 **2. JavaScript.** Use this with the `javascript_tool`, on any http(s) page:
 
 ```js
-await __containers.list()                    // [{id, name, color, icon, tabs}]
+await __containers.list()                    // [{id, name, color, tabs}]
 await __containers.current()                 // container of this tab, or null
 await __containers.open('Work', 'https://github.com/')  // move this tab + navigate
-await __containers.create('Client A', 'purple', 'briefcase')
+await __containers.create('💼 Client A', 'purple')
 ```
 
 This access is always on; it's what the extension is for. Pages can't delete containers or clear

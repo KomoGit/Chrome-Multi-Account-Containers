@@ -21,11 +21,11 @@ async function containers() {
 }
 const find = (list, key) => list.find(c => c.id === key || c.name.toLowerCase() === String(key).toLowerCase());
 
-async function create(list, { name, color, icon }) {
+async function create(list, { name, color }) {
   name = String(name || 'Container').trim().slice(0, 40);
   const existing = find(list, name);
   if (existing) return existing;
-  const c = { id: crypto.randomUUID().slice(0, 8), name, color: COLORS[color] ? color : 'grey', icon: ICONS[icon] ? icon : 'circle' };
+  const c = { id: crypto.randomUUID().slice(0, 8), name, color: COLORS[color] ? color : 'grey' };
   await local.set({ containers: [...list, c] });
   return c;
 }
@@ -66,7 +66,7 @@ const frameUrl = sender => (/^about:/.test(sender.url) ? sender.origin : sender.
 // Badge letter on the toolbar icon + a colored tab group named after the container.
 async function decorate(tabId, cid, group) {
   const list = await containers(), c = list.find(c => c.id === cid);
-  await chrome.action.setBadgeText({ tabId, text: c ? c.name[0].toUpperCase() : '' });
+  await chrome.action.setBadgeText({ tabId, text: c ? [...c.name][0].toUpperCase() : '' });
   if (c) await chrome.action.setBadgeBackgroundColor({ tabId, color: COLORS[c.color] });
   if (!group) return;
   const tab = await chrome.tabs.get(tabId);
@@ -262,7 +262,6 @@ async function handle({ cmd, args = {} }, sender) {
       const c = find(list, args.id), oldName = c.name;
       c.name = String(args.name || c.name).trim().slice(0, 40);
       if (COLORS[args.color]) c.color = args.color;
-      if (ICONS[args.icon]) c.icon = args.icon;
       await local.set({ containers: list });
       for (const g of await chrome.tabGroups.query({ title: oldName })) await chrome.tabGroups.update(g.id, { title: c.name, color: c.color });
       for (const [t, x] of Object.entries(tabs)) if (x === c.id) decorate(+t, c.id).catch(() => {});

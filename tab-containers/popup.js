@@ -4,21 +4,20 @@ const form = $('form');
 let tab;
 
 for (const c in COLORS) form.color.add(new Option(c, c));
-for (const i in ICONS) form.icon.add(new Option(ICONS[i], i));
 
 function row(c) {
   const el = document.createElement('div');
   el.className = 'row';
   el.innerHTML = '<span class="dot"></span><span class="name"></span><span class="n"></span>' +
-    '<button data-a="edit" title="Edit">✎</button><button data-a="clear" title="Clear cookies">🧹</button><button data-a="remove" title="Delete">🗑</button>';
+    '<button data-a="edit">Edit</button><button data-a="clear" title="Clear this container\'s cookies">Clear</button><button data-a="remove">Delete</button>';
   el.querySelector('.dot').style.background = COLORS[c.color];
-  el.querySelector('.name').textContent = `${ICONS[c.icon]} ${c.name}`;
+  el.querySelector('.name').textContent = c.name;
   el.querySelector('.n').textContent = c.tabs || '';
   el.onclick = async e => {
     const a = e.target.dataset.a;
     if (!a) { await send('newTab', { id: c.id }); return window.close(); }
     if (a === 'edit') {
-      form.name.value = c.name; form.color.value = c.color; form.icon.value = c.icon;
+      form.name.value = c.name; form.color.value = c.color;
       form.dataset.id = c.id; $('save').textContent = 'Save';
       return form.name.focus();
     }
@@ -35,7 +34,7 @@ async function render() {
   const { assignments = {} } = await chrome.storage.local.get('assignments');
   const { tabs = {} } = await chrome.storage.session.get('tabs');
   const host = /^https?:/.test(tab?.url) ? new URL(tab.url).hostname : '';
-  const options = () => [new Option('No container', ''), ...list.map(c => new Option(`${ICONS[c.icon]} ${c.name}`, c.id))];
+  const options = () => [new Option('No container', ''), ...list.map(c => new Option(c.name, c.id))];
   $('list').replaceChildren(...list.map(row));
   $('move').replaceChildren(...options());
   $('move').value = tabs[tab?.id] || '';
