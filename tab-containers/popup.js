@@ -32,7 +32,7 @@ function row(c) {
 async function render() {
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const list = await send('list');
-  const { assignments = {}, bridge = true } = await chrome.storage.local.get(['assignments', 'bridge']);
+  const { assignments = {} } = await chrome.storage.local.get('assignments');
   const { tabs = {} } = await chrome.storage.session.get('tabs');
   const host = /^https?:/.test(tab?.url) ? new URL(tab.url).hostname : '';
   const options = () => [new Option('No container', ''), ...list.map(c => new Option(`${ICONS[c.icon]} ${c.name}`, c.id))];
@@ -43,12 +43,10 @@ async function render() {
   $('assign').value = assignments[host] || '';
   $('assign').disabled = !host;
   $('host').textContent = host || 'this site';
-  $('bridge').checked = bridge;
 }
 
 $('move').onchange = e => send('open', { tabId: tab.id, name: e.target.value || 'none', url: tab.url }).then(render);
 $('assign').onchange = e => send('assignSite', { host: new URL(tab.url).hostname, id: e.target.value }).then(render);
-$('bridge').onchange = e => send('setBridge', { on: e.target.checked });
 form.onsubmit = async e => {
   e.preventDefault();
   await send(form.dataset.id ? 'update' : 'create', { ...Object.fromEntries(new FormData(form)), id: form.dataset.id });

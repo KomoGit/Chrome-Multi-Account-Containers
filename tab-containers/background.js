@@ -233,7 +233,6 @@ async function handle({ cmd, args = {} }, sender) {
   const fromPage = !!sender.tab, tabId = fromPage ? sender.tab.id : args.tabId;
   if (fromPage && !INTERNAL.includes(cmd)) {
     if (!BRIDGE.includes(cmd)) throw Error(`"${cmd}" is not available to web pages`);
-    if ((await local.get('bridge')).bridge === false) throw Error('The container API is turned off in the Tab Containers popup');
   }
   const list = await containers(), tabs = await tabsP;
   switch (cmd) {
@@ -285,7 +284,6 @@ async function handle({ cmd, args = {} }, sender) {
       await local.set({ assignments });
       return;
     }
-    case 'setBridge': await local.set({ bridge: !!args.on }); return;
     default: throw Error(`unknown command "${cmd}"`);
   }
 }

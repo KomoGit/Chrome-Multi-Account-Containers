@@ -42,9 +42,8 @@ await __containers.open('Work', 'https://github.com/')  // move this tab + navig
 await __containers.create('Client A', 'purple', 'briefcase')
 ```
 
-Pages can't delete containers or clear cookies; only the popup can. The popup checkbox
-**Let AI agents & pages use containers** turns both entry points off. Note that while it's on,
-any website could call the same four functions as the agent.
+This access is always on; it's what the extension is for. Pages can't delete containers or clear
+cookies; only the popup can. Any website can call the same four functions as the agent.
 
 Snippet for `CLAUDE.md`:
 
