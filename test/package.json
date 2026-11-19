@@ -1,0 +1,1 @@
+{ "type": "module", "scripts": { "setup": "npm i puppeteer-core@24 && npx @puppeteer/browsers install chrome@stable --path ./browsers", "test": "node test.mjs ../tab-containers" } }

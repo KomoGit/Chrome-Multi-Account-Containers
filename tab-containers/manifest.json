@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Containers",
+  "version": "1.0.0",
+  "description": "Multi-account containers for Chrome: each container tab gets its own cookie jar. Scriptable by AI agents.",
+  "permissions": ["declarativeNetRequest", "webRequest", "webNavigation", "storage", "tabs", "tabGroups"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Tab Containers" },
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["page.js"], "world": "MAIN", "run_at": "document_start", "all_frames": true },
+    { "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_start", "all_frames": true }
+  ]
+}
