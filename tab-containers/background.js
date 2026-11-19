@@ -128,7 +128,9 @@ async function rebuild() {
     const condition = { tabIds, resourceTypes: TYPES };
     rules.push({ id: id++, priority: 1, condition, action: { type: 'modifyHeaders',
       requestHeaders: [{ header: 'cookie', operation: 'remove' }],
-      responseHeaders: [{ header: 'set-cookie', operation: 'remove' }] } });
+      responseHeaders: [{ header: 'set-cookie', operation: 'remove' },
+        // page.js reads this synchronously at document_start to scope localStorage before app code runs
+        { header: 'server-timing', operation: 'append', value: `tab-containers;desc="${cid}"` }] } });
     const cookies = Object.values(await jar(cid)).filter(k => !expired(k, now));
     // ponytail: one rule per cookie domain, path ignored; host-only cookies also reach that host's subdomains.
     for (const host of new Set(cookies.map(k => k.domain))) {
@@ -205,7 +207,7 @@ chrome.runtime.onInstalled.addListener(restore);
 
 // ---------- messages (popup, content script, AI bridge) ----------
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  handle(msg, sender).then(r => reply(r ?? {}), e => reply({ error: e.message }));
+  handle(msg, sender).then(r => reply(r === undefined ? {} : r), e => reply({ error: e.message }));
   return true;
 });
 

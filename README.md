@@ -60,12 +60,13 @@ Chrome has no per-tab cookie stores, so this extension builds them itself:
 
 - `declarativeNetRequest` session rules, scoped to container tab IDs, replace the `Cookie` header and strip `Set-Cookie`.
 - `webRequest` reads the stripped `Set-Cookie` headers into the container's jar.
-- A main-world script makes `document.cookie` container-aware.
+- A main-world script makes `document.cookie`, `localStorage` and `sessionStorage` container-aware. Container storage keys live in the real store under a `__mac:<id>:` prefix. The script learns the tab's container before any page script runs, from a `Server-Timing` header the rules add, so token-in-localStorage logins (JWT apps) are isolated too.
 
 What isn't isolated:
 
-- **localStorage, IndexedDB, Cache and service workers** are shared with your normal tabs. Most logins are cookie-based and work, but sites that keep auth tokens in localStorage will leak between containers.
-- In the first few ms of page load, `document.cookie` shows the real jar. The `cookieStore` API isn't covered either.
+- **IndexedDB, Cache Storage and service workers** are shared with your normal tabs.
+- Normal tabs can see the `__mac:` keys in localStorage; container tabs can't see normal keys.
+- In the first few ms of page load, `document.cookie` in a container tab is empty, until the container's cookies arrive. The `cookieStore` API isn't covered.
 - Container cookies are sent regardless of `path`, `Secure` or `SameSite`.
 - The first request of a tab that is auto-assigned or opened from a container tab can go out with normal cookies. The tab is then reloaded inside the container.
 
