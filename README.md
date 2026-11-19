@@ -60,22 +60,36 @@ Chrome has no per-tab cookie stores, so this extension builds them itself:
 
 - `declarativeNetRequest` session rules, scoped to container tab IDs, replace the `Cookie` header and strip `Set-Cookie`.
 - `webRequest` reads the stripped `Set-Cookie` headers into the container's jar.
-- A main-world script makes `document.cookie`, `localStorage` and `sessionStorage` container-aware. Container storage keys live in the real store under a `__mac:<id>:` prefix. The script learns the tab's container before any page script runs, from a `Server-Timing` header the rules add, so token-in-localStorage logins (JWT apps) are isolated too.
+- A main-world script runs before any page script. It learns the tab's container from a `Server-Timing` header the rules add, along with the container's script-visible cookies.
 
-What isn't isolated:
+What each container gets on its own:
 
-- **IndexedDB, Cache Storage and service workers** are shared with your normal tabs.
-- Normal tabs can see the `__mac:` keys in localStorage; container tabs can't see normal keys.
-- In the first few ms of page load, `document.cookie` in a container tab is empty, until the container's cookies arrive. The `cookieStore` API isn't covered.
+| Surface | How |
+|---|---|
+| Cookies (HTTP, `document.cookie`, `cookieStore`) | Own jar; header rules + script shims |
+| localStorage, sessionStorage | Keys stored under a `__mac:<id>:` prefix |
+| IndexedDB, Cache Storage | Database and cache names prefixed |
+| BroadcastChannel, Web Locks | Channel and lock names prefixed, so logout or token-refresh sync doesn't cross containers |
+| `storage` events | Other containers' changes are dropped |
+| HTTP cache | Container requests revalidate, so a response cached for a normal tab is never replayed |
+| Service workers, SharedWorker | Blocked in container tabs, since their requests carry no tab ID. A worker registered from a normal tab is removed before a container tab loads that origin, and normal tabs re-register it on their next visit |
+
+Normal tabs can't see container keys, databases or caches, and their `localStorage.clear()` leaves container data alone.
+
+Remaining limits:
+
+- **Normal tabs can reuse responses cached by a container tab** if a site marks user-specific responses as cacheable (`private, max-age=N`). Most sites send such responses as `no-store` or `no-cache`.
+- A page that creates an `about:blank` iframe and touches its storage in the same tick can reach the unscoped store.
 - Container cookies are sent regardless of `path`, `Secure` or `SameSite`.
-- The first request of a tab that is auto-assigned or opened from a container tab can go out with normal cookies. The tab is then reloaded inside the container.
+- The first request of a tab that is auto-assigned, opened from a container tab, or served by a service worker can go out unscoped. The tab is then reloaded inside the container.
+- Saved passwords, permissions, HSTS and the like are browser-wide.
 
 For hard isolation, such as banking or accounts that must never mix, use separate **Chrome profiles**.
 Claude in Chrome can drive each profile through `list_connected_browsers` / `switch_browser`.
 
 ## Tests
 
-Runs 16 isolation and API checks in a headless Chrome for Testing against a local server:
+Runs 33 isolation and API checks in a headless Chrome for Testing against a local server:
 
 ```bash
 cd test && npm run setup && npm test

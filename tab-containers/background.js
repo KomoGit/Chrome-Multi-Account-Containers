@@ -6,7 +6,7 @@ importScripts('common.js');
 const local = chrome.storage.local;
 const TYPES = ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'csp_report', 'media', 'websocket', 'other'];
 const BRIDGE = ['list', 'current', 'open', 'create']; // what web pages / AI agents may call
-const INTERNAL = ['getCookies', 'setCookie'];        // our own content script
+const INTERNAL = ['getCookies', 'setCookie', 'unscoped']; // our own content script
 
 // ---------- state ----------
 const tabsP = chrome.storage.session.get('tabs').then(r => r.tabs || {}); // tabId -> containerId
@@ -45,9 +45,23 @@ async function openTab(tabId, name, url) {
   const c = !name || /^none$/i.test(name) ? null : find(list, name) ?? await create(list, { name });
   await assign(tabId, c?.id);
   // Navigate after a beat so a page that asked (the JS bridge) still gets its reply.
-  if (/^(https?:|about:blank$)/i.test(url)) setTimeout(() => chrome.tabs.update(tabId, { url }), 50);
+  if (/^(https?:|about:blank$)/i.test(url)) setTimeout(async () => {
+    if (c && /^https?:/i.test(url)) await dropServiceWorkers(new URL(url).origin);
+    chrome.tabs.update(tabId, { url });
+  }, 50);
   return c;
 }
+
+// Service workers are shared per origin and their requests carry no tab id, so a worker registered
+// from a normal tab would serve a container tab with normal cookies. Container tabs can't register
+// workers (page.js), and the origin's existing ones are removed before a container tab loads it.
+// Normal tabs re-register them on their next visit.
+const dropServiceWorkers = origin =>
+  chrome.browsingData.remove({ origins: [origin] }, { serviceWorkers: true }).catch(console.error);
+const unscopedAt = {}; // tabId -> last fix time, so a page that keeps loading unscoped can't loop
+
+// The frame's URL, or its inherited origin for about:blank / srcdoc frames.
+const frameUrl = sender => (/^about:/.test(sender.url) ? sender.origin : sender.url);
 
 // Badge letter on the toolbar icon + a colored tab group named after the container.
 async function decorate(tabId, cid, group) {
@@ -127,16 +141,20 @@ async function rebuild() {
   for (const [cid, tabIds] of Object.entries(byC)) {
     const condition = { tabIds, resourceTypes: TYPES };
     rules.push({ id: id++, priority: 1, condition, action: { type: 'modifyHeaders',
-      requestHeaders: [{ header: 'cookie', operation: 'remove' }],
+      // max-age=0 makes the shared HTTP cache revalidate (with this container's cookies) instead of
+      // replaying a response cached for a normal tab.
+      requestHeaders: [{ header: 'cookie', operation: 'remove' }, { header: 'cache-control', operation: 'set', value: 'max-age=0' }],
       responseHeaders: [{ header: 'set-cookie', operation: 'remove' },
         // page.js reads this synchronously at document_start to scope localStorage before app code runs
         { header: 'server-timing', operation: 'append', value: `tab-containers;desc="${cid}"` }] } });
     const cookies = Object.values(await jar(cid)).filter(k => !expired(k, now));
     // ponytail: one rule per cookie domain, path ignored; host-only cookies also reach that host's subdomains.
     for (const host of new Set(cookies.map(k => k.domain))) {
-      const value = cookieString(cookies, host);
+      const value = cookieString(cookies, host), js = cookieString(cookies, host, k => !k.httpOnly);
+      // The script-visible cookies also ride in Server-Timing so page.js has document.cookie before any script runs.
+      const seed = js && [{ header: 'server-timing', operation: 'append', value: `tab-containers-cookies;desc="${`${host}|${js}`.replace(/["\\]/g, '\\$&')}"` }];
       if (value) rules.push({ id: id++, priority: 2 + host.split('.').length, condition: { ...condition, requestDomains: [host] },
-        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value }] } });
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value }], ...(seed && { responseHeaders: seed }) } });
     }
   }
   const old = await chrome.declarativeNetRequest.getSessionRules();
@@ -222,11 +240,20 @@ async function handle({ cmd, args = {} }, sender) {
     case 'getCookies': {
       const cid = tabs[tabId];
       if (!cid) return {};
-      const u = new URL(sender.url), now = Date.now();
+      let u;
+      try { u = new URL(frameUrl(sender)); } catch { return { container: cid, cookie: '' }; } // opaque origin
+      const now = Date.now();
       return { container: cid, cookie: cookieString(Object.values(await jar(cid)), u.hostname,
         k => !k.httpOnly && !expired(k, now) && (!k.secure || u.protocol === 'https:') && pathMatch(u.pathname, k.path)) };
     }
-    case 'setCookie': if (tabs[tabId]) await saveCookies(tabs[tabId], [String(args.cookie)], sender.url, true); return;
+    case 'setCookie': if (tabs[tabId]) await saveCookies(tabs[tabId], [String(args.cookie)], frameUrl(sender), true); return;
+    case 'unscoped': {
+      if (!tabs[tabId] || Date.now() - (unscopedAt[tabId] || 0) < 30000) return;
+      unscopedAt[tabId] = Date.now();
+      await dropServiceWorkers(new URL(frameUrl(sender)).origin);
+      await chrome.tabs.reload(tabId);
+      return;
+    }
     case 'list': return list.map(c => ({ ...c, tabs: Object.values(tabs).filter(x => x === c.id).length }));
     case 'current': return list.find(c => c.id === tabs[tabId]) ?? null;
     case 'create': return create(list, args);

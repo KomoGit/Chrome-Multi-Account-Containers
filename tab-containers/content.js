@@ -12,4 +12,5 @@ window.addEventListener('message', async e => {
   if (e.source !== window || !d || typeof d !== 'object') return;
   if (d.__mac === 'req') window.postMessage({ __mac: 'res', id: d.id, result: await send(String(d.cmd), d.args) }, '*');
   else if (d.__mac === 'set') send('setCookie', { cookie: String(d.cookie) });
+  else if (d.__mac === 'unscoped') send('unscoped');
 });

@@ -9,6 +9,9 @@ http.createServer((req, res) => {
   const u = new URL(req.url, B), v = u.searchParams.get('v');
   if (u.pathname === '/set') res.writeHead(200, { 'set-cookie': [`sid=${v}; HttpOnly; Path=/`, `js=${v}; Path=/`], 'content-type': 'text/html' }).end('set');
   else if (u.pathname === '/cached') res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'max-age=3600' }).end('<pre id=c>cached</pre>');
+  else if (u.pathname === '/private') res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'private, max-age=3600' }).end(`<pre id=c>${req.headers.cookie || ''}</pre>`);
+  else if (u.pathname === '/sw.js') res.writeHead(200, { 'content-type': 'text/javascript' }).end(
+    "self.oninstall = () => skipWaiting(); self.onactivate = e => e.waitUntil(clients.claim()); self.onfetch = e => e.respondWith(fetch(e.request));");
   else if (u.pathname === '/login') res.writeHead(302, { 'set-cookie': 'sid=redir; HttpOnly; Path=/', location: '/echo' }).end();
   else res.writeHead(200, { 'content-type': 'text/html' }).end(`<pre id=c>${req.headers.cookie || ''}</pre>`);
 }).listen(PORT);
@@ -91,6 +94,58 @@ try {
   await d.reload();
   check('container clear() leaves default alone', [await w.evaluate(() => localStorage.length), await d.evaluate(() => localStorage.tok)], [0, 'default']);
   check('JS API current() is null outside containers', await d.evaluate(() => __containers.current()), null);
+
+  // Every other same-origin surface. d = normal tab, w = Work tab, both on site.localhost.
+  await w.evaluate(() => { localStorage.keep = 'work'; });
+  await d.evaluate(() => localStorage.clear());
+  await w.reload(); await d.reload();
+  check("normal tab's clear() keeps container data; __mac keys hidden",
+    [await w.evaluate(() => localStorage.keep), await d.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('__mac')))], ['work', false]);
+
+  await d.evaluate(() => new Promise(r => { const q = indexedDB.open('app'); q.onupgradeneeded = () => q.result.createObjectStore('s'); q.onsuccess = () => r(); }));
+  check('IndexedDB isolated', await w.evaluate(() => new Promise(async r => {
+    const listed = (await indexedDB.databases()).map(x => x.name);
+    const q = indexedDB.open('app'); let fresh = false;
+    q.onupgradeneeded = () => { fresh = true; }; q.onsuccess = () => r([listed, fresh, q.result.name]);
+  })), [[], true, 'app']);
+  check('normal tab does not list container DBs', await d.evaluate(async () => (await indexedDB.databases()).map(x => x.name)), ['app']);
+
+  await d.evaluate(async () => (await caches.open('c')).put('/x', new Response('default')));
+  check('Cache Storage isolated', await w.evaluate(async () => [await caches.keys(), await caches.has('c'), !!(await caches.match('/x'))]), [[], false, false]);
+
+  await d.evaluate(() => { window.got = []; new BroadcastChannel('auth').onmessage = e => got.push(e.data); });
+  await w.evaluate(() => new BroadcastChannel('auth').postMessage('logout'));
+  await sleep(300);
+  check('BroadcastChannel isolated', await d.evaluate(() => got), []);
+
+  await d.evaluate(() => { navigator.locks.request('refresh', () => new Promise(() => {})); });
+  check('Web Locks isolated', await w.evaluate(() => navigator.locks.request('refresh', { ifAvailable: true }, l => l !== null)), true);
+
+  await d.evaluate(() => { window.ev = []; addEventListener('storage', e => ev.push(e.key)); });
+  await w.evaluate(() => { window.ev = []; addEventListener('storage', e => ev.push(e.key)); localStorage.ping = '1'; });
+  await d.evaluate(() => { localStorage.pong = '1'; });
+  await sleep(300);
+  check('storage events stay in their container', [await d.evaluate(() => ev), await w.evaluate(() => ev)], [[], []]);
+
+  check('workers hidden in containers', [await w.evaluate(() => ['serviceWorker' in navigator, typeof SharedWorker]),
+    await d.evaluate(() => ['serviceWorker' in navigator, typeof SharedWorker])], [[false, 'undefined'], [true, 'function']]);
+
+  await w.goto(`${B}/set?v=work2`); await sleep(200); await w.goto(`${B}/cached`);
+  check('cookieStore shows container cookies', await w.evaluate(async () => (await cookieStore.getAll()).map(c => c.name + '=' + c.value).sort()), ['js=work2', 'x=1']);
+
+  await d.goto(`${B}/private`);
+  await w.goto(`${B}/private`);
+  check("HTTP cache doesn't replay a normal tab's private response", await cookieOf(w), 'sid=work2; js=work2; x=1');
+
+  // A service worker registered from a normal tab must not serve container tabs.
+  await d.goto(`${B}/echo`);
+  await d.evaluate(() => navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready));
+  await d.reload();
+  check('normal tab is SW-controlled', await d.evaluate(() => !!navigator.serviceWorker.controller), true);
+  await w.goto(`${B}/echo?sw`).catch(() => {});
+  for (let i = 0; i < 30 && !(await w.evaluate(() => !!window[Symbol.for('tab-containers')]).catch(() => false)); i++) await sleep(200);
+  await w.waitForSelector('#c');
+  check('container tab under a normal-tab SW recovers its isolation', [await cookieOf(w), await w.evaluate(() => !!window[Symbol.for('tab-containers')])], ['sid=work2; js=work2; x=1', true]);
   console.log(`\n${ok} checks passed`);
 } catch (e) { console.error('FAIL:', e.message); process.exitCode = 1; }
 finally { await browser.close(); process.exit(); }
