@@ -230,7 +230,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 });
 
 async function handle({ cmd, args = {} }, sender) {
-  const fromPage = !!sender.tab, tabId = fromPage ? sender.tab.id : args.tabId;
+  // Our own pages (popup, even when opened as a tab) are trusted; everything else is a web page.
+  const fromPage = !sender.url?.startsWith(chrome.runtime.getURL('')), tabId = fromPage ? sender.tab?.id : args.tabId;
   if (fromPage && !INTERNAL.includes(cmd)) {
     if (!BRIDGE.includes(cmd)) throw Error(`"${cmd}" is not available to web pages`);
   }
@@ -281,6 +282,9 @@ async function handle({ cmd, args = {} }, sender) {
       const { assignments = {} } = await local.get('assignments');
       if (args.id) assignments[args.host] = args.id; else delete assignments[args.host];
       await local.set({ assignments });
+      // Apply to the tab the choice was made on, right away (reloads it into the container).
+      const tab = args.id && tabId != null && await chrome.tabs.get(tabId).catch(() => null);
+      if (tab?.url && tabs[tabId] !== args.id) await openTab(tabId, args.id, tab.url);
       return;
     }
     default: throw Error(`unknown command "${cmd}"`);

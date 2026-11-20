@@ -12,8 +12,7 @@ jar, so you can be signed in to the same site as different people in side-by-sid
 ## Use
 
 - **Popup**: click a container to open a new tab in it. Use **Edit**, **Clear** (its cookies) and **Delete** next to it (Clear and Delete ask "Sure?" first). Want an emoji? Put it in the name, e.g. `💼 Work`.
-- **This tab** moves the current tab into a container and reloads it.
-- **Always open *site* in** opens that site, and its subdomains, in the chosen container every time.
+- **Always open *site* in** moves the current tab into the chosen container right away, and opens that site and its subdomains there from then on (in tabs not already in a container).
 - Container tabs are put in a colored tab group named after the container, and the toolbar badge shows the container's first letter.
 - Links and popups opened from a container tab stay in that container. A plain new tab (Ctrl+T) opens with no container, as in Firefox.
 - After a browser restart, tabs in container-named groups are put back into their containers and reloaded.
@@ -88,7 +87,7 @@ Claude in Chrome can drive each profile through `list_connected_browsers` / `swi
 
 ## Tests
 
-Runs 33 isolation and API checks in a headless Chrome for Testing against a local server:
+Runs 36 isolation and API checks in a headless Chrome for Testing against a local server:
 
 ```bash
 cd test && npm run setup && npm test

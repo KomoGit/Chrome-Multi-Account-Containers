@@ -146,6 +146,22 @@ try {
   for (let i = 0; i < 30 && !(await w.evaluate(() => !!window[Symbol.for('tab-containers')]).catch(() => false)); i++) await sleep(200);
   await w.waitForSelector('#c');
   check('container tab under a normal-tab SW recovers its isolation', [await cookieOf(w), await w.evaluate(() => !!window[Symbol.for('tab-containers')])], ['sid=work2; js=work2; x=1', true]);
+
+  // "Always open this site in", chosen from the popup while on the site.
+  const inC = async p => { for (let i = 0; i < 30 && !(await p.evaluate(() => !!window[Symbol.for('tab-containers')]).catch(() => false)); i++) await sleep(200); return (await p.evaluate(() => __containers.current()))?.name; };
+  const e = await browser.newPage();
+  await e.goto(`${B}/echo?assign`);
+  const pop = await browser.newPage();
+  await pop.goto(`chrome-extension://${new URL(sw.url()).host}/popup.html`);
+  check('popup opened as a tab is trusted', await pop.evaluate(async u => {
+    const t = (await chrome.tabs.query({})).find(t => t.url === u);
+    return chrome.runtime.sendMessage({ cmd: 'assignSite', args: { host: 'site.localhost', id: 'banking', tabId: t.id } });
+  }, `${B}/echo?assign`), {});
+  await pop.close();
+  check('always-open-in applies to the current tab at once', await inC(e), 'Banking');
+  const f = await browser.newPage();
+  await f.goto(`${B}/echo?f`).catch(() => {});
+  check('always-open-in applies to new visits', await inC(f), 'Banking');
   console.log(`\n${ok} checks passed`);
 } catch (e) { console.error('FAIL:', e.message); process.exitCode = 1; }
 finally { await browser.close(); process.exit(); }

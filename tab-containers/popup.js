@@ -32,20 +32,16 @@ async function render() {
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const list = await send('list');
   const { assignments = {} } = await chrome.storage.local.get('assignments');
-  const { tabs = {} } = await chrome.storage.session.get('tabs');
   const host = /^https?:/.test(tab?.url) ? new URL(tab.url).hostname : '';
   const options = () => [new Option('No container', ''), ...list.map(c => new Option(c.name, c.id))];
   $('list').replaceChildren(...list.map(row));
-  $('move').replaceChildren(...options());
-  $('move').value = tabs[tab?.id] || '';
   $('assign').replaceChildren(...options());
   $('assign').value = assignments[host] || '';
   $('assign').disabled = !host;
   $('host').textContent = host || 'this site';
 }
 
-$('move').onchange = e => send('open', { tabId: tab.id, name: e.target.value || 'none', url: tab.url }).then(render);
-$('assign').onchange = e => send('assignSite', { host: new URL(tab.url).hostname, id: e.target.value }).then(render);
+$('assign').onchange = e => send('assignSite', { host: new URL(tab.url).hostname, id: e.target.value, tabId: tab.id }).then(render);
 form.onsubmit = async e => {
   e.preventDefault();
   await send(form.dataset.id ? 'update' : 'create', { ...Object.fromEntries(new FormData(form)), id: form.dataset.id });
